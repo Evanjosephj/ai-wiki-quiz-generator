@@ -1,0 +1,73 @@
+Python (programming language)
+Summary
+Python is a high-level, general-purpose programming language developed by Guido van Rossum, known for its emphasis on code readability and significant indentation. It supports multiple programming paradigms and memory management through reference counting and a cycle-detecting garbage collector. Widely used in machine learning and as an introductory language, Python has undergone major revisions, with the currently supported versions being in the 3.x series.
+
+Key Entities
+People:
+Guido van Rossum, Tim Peters, Alex Martelli
+
+Organizations:
+Centrum Wiskunde & Informatica (CWI), Python Software Foundation
+
+Locations:
+Netherlands
+
+Quiz Questions
+Question 1
+easy
+Who is credited with beginning work on Python in the late 1980s?
+
+Tim Peters
+Guido van Rossum
+Alex Martelli
+Monty Python
+Show Answer
+Question 2
+medium
+What is a prominent characteristic of Python's design philosophy regarding code readability?
+
+Extensive use of semicolons to terminate statements
+Emphasis on code readability with the use of significant indentation
+Mandatory use of curly braces for defining code blocks
+Preference for cryptic abbreviations over English keywords
+Show Answer
+Question 3
+easy
+From what source does the name 'Python' derive?
+
+A type of snake known for its power
+The British comedy series Monty Python's Flying Circus
+A character from Greek mythology
+A scientific algorithm developed at CWI
+Show Answer
+Question 4
+medium
+When was Python 3.0 released, and what was its most notable characteristic concerning compatibility?
+
+1991, it was the initial public release
+2000, it introduced list comprehensions
+2008, it was a major revision not completely backward-compatible with earlier versions
+2020, it marked the end-of-life for Python 2.7
+Show Answer
+Question 5
+medium
+What mechanisms does Python primarily use for memory management?
+
+Manual memory allocation and deallocation by the programmer
+Solely reference counting
+A combination of reference counting and a cycle-detecting garbage collector
+Only a just-in-time compiler
+Show Answer
+Question 6
+hard
+What does the term 'pythonic' generally refer to within the Python community?
+
+A specific error message related to syntax
+Code that is highly optimized for performance at the expense of readability
+Code that uses Python idioms well, shows fluency, and conforms with its minimalist philosophy and emphasis on readability
+A version of Python specifically designed for embedded systems
+Show Answer
+Related Topics
+Programming Paradigms
+Programming Language History
+Software Engineering
