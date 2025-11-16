@@ -37,6 +37,12 @@ function App() {
   const [history, setHistory] = useState<HistoryItem[]>([])
   const [selectedQuiz, setSelectedQuiz] = useState<Quiz | null>(null)
   const [showModal, setShowModal] = useState(false)
+  
+  // Take Quiz Mode States
+  const [quizMode, setQuizMode] = useState<'view' | 'take'>('view')
+  const [userAnswers, setUserAnswers] = useState<{[key: number]: string}>({})
+  const [showResults, setShowResults] = useState(false)
+  const [score, setScore] = useState(0)
 
   const generateQuiz = async () => {
     if (!url.startsWith('https://en.wikipedia.org/wiki/')) {
@@ -51,13 +57,16 @@ function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url })
       })
-      
+
       if (!response.ok) {
         throw new Error('Failed to generate quiz')
       }
-      
+
       const data = await response.json()
       setQuiz(data)
+      setQuizMode('view')
+      setUserAnswers({})
+      setShowResults(false)
     } catch (error) {
       alert('Error generating quiz: ' + error)
     }
@@ -80,85 +89,257 @@ function App() {
       const data = await response.json()
       setSelectedQuiz(data)
       setShowModal(true)
+      setQuizMode('view')
+      setUserAnswers({})
+      setShowResults(false)
     } catch (error) {
       alert('Error loading quiz: ' + error)
     }
   }
 
-  const QuizDisplay = ({ quizData }: { quizData: Quiz }) => (
-    <div className="space-y-6">
-      <div className="bg-white rounded-lg shadow-md p-6">
-        <h2 className="text-3xl font-bold text-gray-800 mb-4">{quizData.title}</h2>
-        
-        <div className="mb-6">
-          <h3 className="text-xl font-semibold text-gray-700 mb-2">Summary</h3>
-          <p className="text-gray-600">{quizData.summary}</p>
-        </div>
+  const handleTakeQuiz = () => {
+    setQuizMode('take')
+    setUserAnswers({})
+    setShowResults(false)
+    setScore(0)
+  }
 
-        <div className="mb-6">
-          <h3 className="text-xl font-semibold text-gray-700 mb-3">Key Entities</h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="bg-blue-50 p-4 rounded">
-              <strong className="text-blue-700">People:</strong>
-              <p className="text-gray-700 mt-1">{quizData.key_entities?.people?.join(', ') || 'None'}</p>
-            </div>
-            <div className="bg-green-50 p-4 rounded">
-              <strong className="text-green-700">Organizations:</strong>
-              <p className="text-gray-700 mt-1">{quizData.key_entities?.organizations?.join(', ') || 'None'}</p>
-            </div>
-            <div className="bg-purple-50 p-4 rounded">
-              <strong className="text-purple-700">Locations:</strong>
-              <p className="text-gray-700 mt-1">{quizData.key_entities?.locations?.join(', ') || 'None'}</p>
-            </div>
+  const handleAnswerSelect = (questionIndex: number, answer: string) => {
+    setUserAnswers({
+      ...userAnswers,
+      [questionIndex]: answer
+    })
+  }
+
+  const handleSubmitQuiz = () => {
+    if (!quiz) return
+    
+    const answeredCount = Object.keys(userAnswers).length
+    if (answeredCount < quiz.quiz.length) {
+      const confirm = window.confirm(
+        `You've only answered ${answeredCount} out of ${quiz.quiz.length} questions. Submit anyway?`
+      )
+      if (!confirm) return
+    }
+
+    let correctCount = 0
+    quiz.quiz.forEach((q, idx) => {
+      if (userAnswers[idx] === q.answer) {
+        correctCount++
+      }
+    })
+
+    setScore(correctCount)
+    setShowResults(true)
+  }
+
+  const handleBackToView = () => {
+    setQuizMode('view')
+    setUserAnswers({})
+    setShowResults(false)
+  }
+
+  const QuizDisplay = ({ quizData, mode = 'view' }: { quizData: Quiz, mode?: 'view' | 'take' }) => {
+    const isViewMode = mode === 'view'
+    const isTakeMode = mode === 'take'
+
+    return (
+      <div className="space-y-6">
+        <div className="bg-white rounded-lg shadow-md p-6">
+          <div className="flex justify-between items-start mb-4">
+            <h2 className="text-3xl font-bold text-gray-800">{quizData.title}</h2>
+            {isViewMode && (
+              <button
+                onClick={handleTakeQuiz}
+                className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 transition-colors font-semibold"
+              >
+                📝 Take Quiz
+              </button>
+            )}
+            {isTakeMode && !showResults && (
+              <button
+                onClick={handleBackToView}
+                className="bg-gray-600 text-white px-6 py-2 rounded-lg hover:bg-gray-700 transition-colors font-semibold"
+              >
+                👁️ View Mode
+              </button>
+            )}
           </div>
-        </div>
 
-        <div className="mb-6">
-          <h3 className="text-xl font-semibold text-gray-700 mb-3">Quiz Questions</h3>
-          <div className="space-y-4">
-            {quizData.quiz?.map((q, idx) => (
-              <div key={idx} className="border border-gray-200 rounded-lg p-5 bg-gray-50">
-                <div className="flex justify-between items-start mb-3">
-                  <h4 className="text-lg font-semibold text-gray-800">Question {idx + 1}</h4>
-                  <span className={`px-3 py-1 rounded text-sm font-medium ${
-                    q.difficulty === 'easy' ? 'bg-green-200 text-green-800' :
-                    q.difficulty === 'medium' ? 'bg-yellow-200 text-yellow-800' :
-                    'bg-red-200 text-red-800'
-                  }`}>
-                    {q.difficulty}
-                  </span>
-                </div>
-                <p className="text-gray-700 mb-4 font-medium">{q.question}</p>
-                <ul className="space-y-2 mb-4">
-                  {q.options.map((opt, i) => (
-                    <li key={i} className="text-gray-600 pl-4">{opt}</li>
-                  ))}
-                </ul>
-                <details className="cursor-pointer">
-                  <summary className="text-blue-600 font-medium hover:text-blue-800">Show Answer</summary>
-                  <div className="mt-3 p-4 bg-white rounded border-l-4 border-blue-500">
-                    <p className="text-gray-800"><strong>Answer:</strong> {q.answer}</p>
-                    <p className="text-gray-600 mt-2"><strong>Explanation:</strong> {q.explanation}</p>
-                  </div>
-                </details>
+          {showResults && (
+            <div className={`mb-6 p-6 rounded-lg ${
+              score >= quizData.quiz.length * 0.8 ? 'bg-green-100 border-2 border-green-500' :
+              score >= quizData.quiz.length * 0.5 ? 'bg-yellow-100 border-2 border-yellow-500' :
+              'bg-red-100 border-2 border-red-500'
+            }`}>
+              <h3 className="text-2xl font-bold mb-2">
+                {score >= quizData.quiz.length * 0.8 ? '🎉 Excellent!' :
+                 score >= quizData.quiz.length * 0.5 ? '👍 Good Job!' :
+                 '💪 Keep Learning!'}
+              </h3>
+              <p className="text-xl">
+                Your Score: <strong>{score}</strong> out of <strong>{quizData.quiz.length}</strong>
+                {' '}({Math.round((score / quizData.quiz.length) * 100)}%)
+              </p>
+              <button
+                onClick={handleBackToView}
+                className="mt-4 bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors font-semibold"
+              >
+                View Answers & Explanations
+              </button>
+            </div>
+          )}
+
+          {isViewMode && (
+            <>
+              <div className="mb-6">
+                <h3 className="text-xl font-semibold text-gray-700 mb-2">Summary</h3>
+                <p className="text-gray-600">{quizData.summary}</p>
               </div>
-            ))}
-          </div>
-        </div>
 
-        <div>
-          <h3 className="text-xl font-semibold text-gray-700 mb-3">Related Topics</h3>
-          <div className="flex flex-wrap gap-2">
-            {quizData.related_topics?.map((topic, idx) => (
-              <span key={idx} className="bg-indigo-100 text-indigo-700 px-3 py-1 rounded-full text-sm">
-                {topic}
-              </span>
-            ))}
+              <div className="mb-6">
+                <h3 className="text-xl font-semibold text-gray-700 mb-3">Key Entities</h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="bg-blue-50 p-4 rounded">
+                    <strong className="text-blue-700">People:</strong>
+                    <p className="text-gray-700 mt-1">{quizData.key_entities?.people?.join(', ') || 'None'}</p>
+                  </div>
+                  <div className="bg-green-50 p-4 rounded">
+                    <strong className="text-green-700">Organizations:</strong>
+                    <p className="text-gray-700 mt-1">{quizData.key_entities?.organizations?.join(', ') || 'None'}</p>
+                  </div>
+                  <div className="bg-purple-50 p-4 rounded">
+                    <strong className="text-purple-700">Locations:</strong>
+                    <p className="text-gray-700 mt-1">{quizData.key_entities?.locations?.join(', ') || 'None'}</p>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+
+          <div className="mb-6">
+            <h3 className="text-xl font-semibold text-gray-700 mb-3">
+              {isTakeMode && !showResults ? 'Answer the Questions' : 'Quiz Questions'}
+            </h3>
+            <div className="space-y-4">
+              {quizData.quiz?.map((q, idx) => (
+                <div 
+                  key={idx} 
+                  className={`border rounded-lg p-5 ${
+                    showResults 
+                      ? userAnswers[idx] === q.answer 
+                        ? 'bg-green-50 border-green-500' 
+                        : 'bg-red-50 border-red-500'
+                      : isTakeMode 
+                        ? 'bg-blue-50 border-blue-200' 
+                        : 'bg-gray-50 border-gray-200'
+                  }`}
+                >
+                  <div className="flex justify-between items-start mb-3">
+                    <h4 className="text-lg font-semibold text-gray-800">Question {idx + 1}</h4>
+                    <span className={`px-3 py-1 rounded text-sm font-medium ${
+                      q.difficulty === 'easy' ? 'bg-green-200 text-green-800' :
+                      q.difficulty === 'medium' ? 'bg-yellow-200 text-yellow-800' :
+                      'bg-red-200 text-red-800'
+                    }`}>
+                      {q.difficulty}
+                    </span>
+                  </div>
+                  <p className="text-gray-700 mb-4 font-medium">{q.question}</p>
+
+                  {isTakeMode && !showResults ? (
+                    <div className="space-y-2">
+                      {q.options.map((opt, i) => (
+                        <label 
+                          key={i} 
+                          className={`flex items-center p-3 rounded cursor-pointer transition-colors ${
+                            userAnswers[idx] === opt.charAt(0) 
+                              ? 'bg-blue-200 border-2 border-blue-500' 
+                              : 'bg-white border-2 border-gray-300 hover:bg-blue-50'
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            name={`question-${idx}`}
+                            value={opt.charAt(0)}
+                            checked={userAnswers[idx] === opt.charAt(0)}
+                            onChange={(e) => handleAnswerSelect(idx, e.target.value)}
+                            className="mr-3 w-4 h-4"
+                          />
+                          <span className="text-gray-700">{opt}</span>
+                        </label>
+                      ))}
+                    </div>
+                  ) : (
+                    <>
+                      <ul className="space-y-2 mb-4">
+                        {q.options.map((opt, i) => (
+                          <li 
+                            key={i} 
+                            className={`pl-4 ${
+                              showResults && opt.charAt(0) === q.answer ? 'font-bold text-green-700' :
+                              showResults && opt.charAt(0) === userAnswers[idx] ? 'font-bold text-red-700' :
+                              'text-gray-600'
+                            }`}
+                          >
+                            {opt}
+                            {showResults && opt.charAt(0) === q.answer && ' ✓'}
+                            {showResults && opt.charAt(0) === userAnswers[idx] && opt.charAt(0) !== q.answer && ' ✗'}
+                          </li>
+                        ))}
+                      </ul>
+
+                      {(isViewMode || showResults) && (
+                        <details className="cursor-pointer" open={showResults}>
+                          <summary className="text-blue-600 font-medium hover:text-blue-800">
+                            {showResults ? 'Answer & Explanation' : 'Show Answer'}
+                          </summary>
+                          <div className="mt-3 p-4 bg-white rounded border-l-4 border-blue-500">
+                            <p className="text-gray-800"><strong>Answer:</strong> {q.answer}</p>
+                            <p className="text-gray-600 mt-2"><strong>Explanation:</strong> {q.explanation}</p>
+                            {showResults && userAnswers[idx] && (
+                              <p className="mt-2">
+                                <strong>Your Answer:</strong> 
+                                <span className={userAnswers[idx] === q.answer ? 'text-green-600' : 'text-red-600'}>
+                                  {' '}{userAnswers[idx]} {userAnswers[idx] === q.answer ? '✓' : '✗'}
+                                </span>
+                              </p>
+                            )}
+                          </div>
+                        </details>
+                      )}
+                    </>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {isTakeMode && !showResults && (
+              <button
+                onClick={handleSubmitQuiz}
+                className="w-full mt-6 bg-green-600 text-white py-4 rounded-lg font-bold text-lg hover:bg-green-700 transition-colors shadow-lg"
+              >
+                Submit Quiz 🎯
+              </button>
+            )}
           </div>
+
+          {isViewMode && (
+            <div>
+              <h3 className="text-xl font-semibold text-gray-700 mb-3">Related Topics</h3>
+              <div className="flex flex-wrap gap-2">
+                {quizData.related_topics?.map((topic, idx) => (
+                  <span key={idx} className="bg-indigo-100 text-indigo-700 px-3 py-1 rounded-full text-sm">
+                    {topic}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
-    </div>
-  )
+    )
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
@@ -226,7 +407,7 @@ function App() {
               </button>
             </div>
 
-            {quiz && <QuizDisplay quizData={quiz} />}
+            {quiz && <QuizDisplay quizData={quiz} mode={quizMode} />}
           </div>
         )}
 
@@ -288,7 +469,7 @@ function App() {
                 </button>
               </div>
               <div className="p-6">
-                <QuizDisplay quizData={selectedQuiz} />
+                <QuizDisplay quizData={selectedQuiz} mode={quizMode} />
               </div>
             </div>
           </div>
