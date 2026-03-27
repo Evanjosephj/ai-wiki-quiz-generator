@@ -1,4 +1,27 @@
 import { useState } from 'react'
+import {
+  RiBrainLine,
+  RiHistoryLine,
+  RiSparklingLine,
+  RiSendPlaneLine,
+  RiCheckboxCircleLine,
+  RiCloseCircleLine,
+  RiArrowRightLine,
+  RiArrowLeftLine,
+  RiTimeLine,
+  RiBookOpenLine,
+  RiUserLine,
+  RiBuildingLine,
+  RiMapPinLine,
+  RiAwardLine,
+  RiEyeLine,
+  RiPencilLine,
+  RiCloseLine,
+  RiLinkM,
+  RiFlashlightLine,
+  RiMedalLine,
+  RiTrophyLine,
+} from 'react-icons/ri'
 
 interface Quiz {
   id: number
@@ -29,6 +52,12 @@ interface HistoryItem {
   date_generated: string
 }
 
+const difficultyConfig: Record<string, { label: string; color: string }> = {
+  easy: { label: 'Easy', color: '#22c55e' },
+  medium: { label: 'Medium', color: '#f59e0b' },
+  hard: { label: 'Hard', color: '#ef4444' },
+}
+
 function App() {
   const [activeTab, setActiveTab] = useState<'generate' | 'history'>('generate')
   const [url, setUrl] = useState('')
@@ -37,36 +66,31 @@ function App() {
   const [history, setHistory] = useState<HistoryItem[]>([])
   const [selectedQuiz, setSelectedQuiz] = useState<Quiz | null>(null)
   const [showModal, setShowModal] = useState(false)
-  
-  // Take Quiz Mode States
   const [quizMode, setQuizMode] = useState<'view' | 'take'>('view')
-  const [userAnswers, setUserAnswers] = useState<{[key: number]: string}>({})
+  const [userAnswers, setUserAnswers] = useState<{ [key: number]: string }>({})
   const [showResults, setShowResults] = useState(false)
   const [score, setScore] = useState(0)
+  const [openExplanations, setOpenExplanations] = useState<Set<number>>(new Set())
 
   const generateQuiz = async () => {
     if (!url.startsWith('https://en.wikipedia.org/wiki/')) {
       alert('Please enter a valid Wikipedia URL')
       return
     }
-
     setLoading(true)
     try {
       const response = await fetch('http://127.0.0.1:8000/generate_quiz', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url })
+        body: JSON.stringify({ url }),
       })
-
-      if (!response.ok) {
-        throw new Error('Failed to generate quiz')
-      }
-
+      if (!response.ok) throw new Error('Failed to generate quiz')
       const data = await response.json()
       setQuiz(data)
       setQuizMode('view')
       setUserAnswers({})
       setShowResults(false)
+      setOpenExplanations(new Set())
     } catch (error) {
       alert('Error generating quiz: ' + error)
     }
@@ -92,6 +116,7 @@ function App() {
       setQuizMode('view')
       setUserAnswers({})
       setShowResults(false)
+      setOpenExplanations(new Set())
     } catch (error) {
       alert('Error loading quiz: ' + error)
     }
@@ -102,33 +127,21 @@ function App() {
     setUserAnswers({})
     setShowResults(false)
     setScore(0)
+    setOpenExplanations(new Set())
   }
 
   const handleAnswerSelect = (questionIndex: number, answer: string) => {
-    setUserAnswers({
-      ...userAnswers,
-      [questionIndex]: answer
-    })
+    setUserAnswers({ ...userAnswers, [questionIndex]: answer })
   }
 
   const handleSubmitQuiz = () => {
     if (!quiz) return
-    
     const answeredCount = Object.keys(userAnswers).length
     if (answeredCount < quiz.quiz.length) {
-      const confirm = window.confirm(
-        `You've only answered ${answeredCount} out of ${quiz.quiz.length} questions. Submit anyway?`
-      )
-      if (!confirm) return
+      if (!window.confirm(`You've answered ${answeredCount} of ${quiz.quiz.length} questions. Submit anyway?`)) return
     }
-
     let correctCount = 0
-    quiz.quiz.forEach((q, idx) => {
-      if (userAnswers[idx] === q.answer) {
-        correctCount++
-      }
-    })
-
+    quiz.quiz.forEach((q, idx) => { if (userAnswers[idx] === q.answer) correctCount++ })
     setScore(correctCount)
     setShowResults(true)
   }
@@ -139,312 +152,706 @@ function App() {
     setShowResults(false)
   }
 
-  const QuizDisplay = ({ quizData, mode = 'view' }: { quizData: Quiz, mode?: 'view' | 'take' }) => {
-    const isViewMode = mode === 'view'
-    const isTakeMode = mode === 'take'
+  const toggleExplanation = (idx: number) => {
+    setOpenExplanations(prev => {
+      const next = new Set(prev)
+      next.has(idx) ? next.delete(idx) : next.add(idx)
+      return next
+    })
+  }
+
+  const getScoreInfo = (s: number, total: number) => {
+    const pct = Math.round((s / total) * 100)
+    if (pct >= 80) return { label: 'Outstanding!', icon: <RiTrophyLine />, color: '#22c55e', bg: 'rgba(34,197,94,0.1)', border: 'rgba(34,197,94,0.3)' }
+    if (pct >= 50) return { label: 'Well Done!', icon: <RiMedalLine />, color: '#f59e0b', bg: 'rgba(245,158,11,0.1)', border: 'rgba(245,158,11,0.3)' }
+    return { label: 'Keep Going!', icon: <RiFlashlightLine />, color: '#ef4444', bg: 'rgba(239,68,68,0.1)', border: 'rgba(239,68,68,0.3)' }
+  }
+
+  const QuizDisplay = ({ quizData, mode = 'view' }: { quizData: Quiz; mode?: 'view' | 'take' }) => {
+    const isView = mode === 'view'
+    const isTake = mode === 'take'
+    const scoreInfo = getScoreInfo(score, quizData.quiz.length)
 
     return (
-      <div className="space-y-6">
-        <div className="bg-white rounded-lg shadow-md p-6">
-          <div className="flex justify-between items-start mb-4">
-            <h2 className="text-3xl font-bold text-gray-800">{quizData.title}</h2>
-            {isViewMode && (
-              <button
-                onClick={handleTakeQuiz}
-                className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 transition-colors font-semibold"
-              >
-                📝 Take Quiz
-              </button>
-            )}
-            {isTakeMode && !showResults && (
-              <button
-                onClick={handleBackToView}
-                className="bg-gray-600 text-white px-6 py-2 rounded-lg hover:bg-gray-700 transition-colors font-semibold"
-              >
-                👁️ View Mode
-              </button>
-            )}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+        {/* Header Card */}
+        <div className="card">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', flexWrap: 'wrap' }}>
+            <div style={{ flex: 1 }}>
+              <div className="chip" style={{ marginBottom: '0.75rem' }}>
+                <RiBookOpenLine style={{ fontSize: '0.75rem' }} /> Wikipedia Article
+              </div>
+              <h2 style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--text-primary)', fontFamily: 'var(--font-display)', lineHeight: 1.2, marginBottom: '0.5rem' }}>{quizData.title}</h2>
+              <a href={quizData.url} target="_blank" rel="noreferrer" style={{ fontSize: '0.8rem', color: 'var(--accent)', display: 'flex', alignItems: 'center', gap: '0.3rem', textDecoration: 'none', opacity: 0.8 }}>
+                <RiLinkM /> {quizData.url}
+              </a>
+            </div>
+            <div style={{ display: 'flex', gap: '0.75rem', flexShrink: 0 }}>
+              {isView && (
+                <button className="btn-primary" onClick={handleTakeQuiz}>
+                  <RiPencilLine /> Take Quiz
+                </button>
+              )}
+              {isTake && !showResults && (
+                <button className="btn-ghost" onClick={handleBackToView}>
+                  <RiEyeLine /> View Mode
+                </button>
+              )}
+            </div>
           </div>
 
+          {/* Score Banner */}
           {showResults && (
-            <div className={`mb-6 p-6 rounded-lg ${
-              score >= quizData.quiz.length * 0.8 ? 'bg-green-100 border-2 border-green-500' :
-              score >= quizData.quiz.length * 0.5 ? 'bg-yellow-100 border-2 border-yellow-500' :
-              'bg-red-100 border-2 border-red-500'
-            }`}>
-              <h3 className="text-2xl font-bold mb-2">
-                {score >= quizData.quiz.length * 0.8 ? '🎉 Excellent!' :
-                 score >= quizData.quiz.length * 0.5 ? '👍 Good Job!' :
-                 '💪 Keep Learning!'}
-              </h3>
-              <p className="text-xl">
-                Your Score: <strong>{score}</strong> out of <strong>{quizData.quiz.length}</strong>
-                {' '}({Math.round((score / quizData.quiz.length) * 100)}%)
-              </p>
-              <button
-                onClick={handleBackToView}
-                className="mt-4 bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors font-semibold"
-              >
-                View Answers & Explanations
-              </button>
-            </div>
-          )}
-
-          {isViewMode && (
-            <>
-              <div className="mb-6">
-                <h3 className="text-xl font-semibold text-gray-700 mb-2">Summary</h3>
-                <p className="text-gray-600">{quizData.summary}</p>
-              </div>
-
-              <div className="mb-6">
-                <h3 className="text-xl font-semibold text-gray-700 mb-3">Key Entities</h3>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="bg-blue-50 p-4 rounded">
-                    <strong className="text-blue-700">People:</strong>
-                    <p className="text-gray-700 mt-1">{quizData.key_entities?.people?.join(', ') || 'None'}</p>
-                  </div>
-                  <div className="bg-green-50 p-4 rounded">
-                    <strong className="text-green-700">Organizations:</strong>
-                    <p className="text-gray-700 mt-1">{quizData.key_entities?.organizations?.join(', ') || 'None'}</p>
-                  </div>
-                  <div className="bg-purple-50 p-4 rounded">
-                    <strong className="text-purple-700">Locations:</strong>
-                    <p className="text-gray-700 mt-1">{quizData.key_entities?.locations?.join(', ') || 'None'}</p>
-                  </div>
+            <div style={{ marginTop: '1.5rem', padding: '1.5rem', borderRadius: '12px', background: scoreInfo.bg, border: `1px solid ${scoreInfo.border}`, display: 'flex', alignItems: 'center', gap: '1.25rem', flexWrap: 'wrap' }}>
+              <div style={{ fontSize: '2.5rem', color: scoreInfo.color }}>{scoreInfo.icon}</div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: '1.25rem', fontWeight: 800, color: scoreInfo.color, fontFamily: 'var(--font-display)' }}>{scoreInfo.label}</div>
+                <div style={{ color: 'var(--text-secondary)', fontSize: '0.95rem', marginTop: '0.2rem' }}>
+                  You scored <strong style={{ color: 'var(--text-primary)' }}>{score}</strong> out of <strong style={{ color: 'var(--text-primary)' }}>{quizData.quiz.length}</strong> &mdash; {Math.round((score / quizData.quiz.length) * 100)}%
                 </div>
               </div>
-            </>
-          )}
-
-          <div className="mb-6">
-            <h3 className="text-xl font-semibold text-gray-700 mb-3">
-              {isTakeMode && !showResults ? 'Answer the Questions' : 'Quiz Questions'}
-            </h3>
-            <div className="space-y-4">
-              {quizData.quiz?.map((q, idx) => (
-                <div 
-                  key={idx} 
-                  className={`border rounded-lg p-5 ${
-                    showResults 
-                      ? userAnswers[idx] === q.answer 
-                        ? 'bg-green-50 border-green-500' 
-                        : 'bg-red-50 border-red-500'
-                      : isTakeMode 
-                        ? 'bg-blue-50 border-blue-200' 
-                        : 'bg-gray-50 border-gray-200'
-                  }`}
-                >
-                  <div className="flex justify-between items-start mb-3">
-                    <h4 className="text-lg font-semibold text-gray-800">Question {idx + 1}</h4>
-                    <span className={`px-3 py-1 rounded text-sm font-medium ${
-                      q.difficulty === 'easy' ? 'bg-green-200 text-green-800' :
-                      q.difficulty === 'medium' ? 'bg-yellow-200 text-yellow-800' :
-                      'bg-red-200 text-red-800'
-                    }`}>
-                      {q.difficulty}
-                    </span>
-                  </div>
-                  <p className="text-gray-700 mb-4 font-medium">{q.question}</p>
-
-                  {isTakeMode && !showResults ? (
-                    <div className="space-y-2">
-                      {q.options.map((opt, i) => (
-                        <label 
-                          key={i} 
-                          className={`flex items-center p-3 rounded cursor-pointer transition-colors ${
-                            userAnswers[idx] === opt.charAt(0) 
-                              ? 'bg-blue-200 border-2 border-blue-500' 
-                              : 'bg-white border-2 border-gray-300 hover:bg-blue-50'
-                          }`}
-                        >
-                          <input
-                            type="radio"
-                            name={`question-${idx}`}
-                            value={opt.charAt(0)}
-                            checked={userAnswers[idx] === opt.charAt(0)}
-                            onChange={(e) => handleAnswerSelect(idx, e.target.value)}
-                            className="mr-3 w-4 h-4"
-                          />
-                          <span className="text-gray-700">{opt}</span>
-                        </label>
-                      ))}
-                    </div>
-                  ) : (
-                    <>
-                      <ul className="space-y-2 mb-4">
-                        {q.options.map((opt, i) => (
-                          <li 
-                            key={i} 
-                            className={`pl-4 ${
-                              showResults && opt.charAt(0) === q.answer ? 'font-bold text-green-700' :
-                              showResults && opt.charAt(0) === userAnswers[idx] ? 'font-bold text-red-700' :
-                              'text-gray-600'
-                            }`}
-                          >
-                            {opt}
-                            {showResults && opt.charAt(0) === q.answer && ' ✓'}
-                            {showResults && opt.charAt(0) === userAnswers[idx] && opt.charAt(0) !== q.answer && ' ✗'}
-                          </li>
-                        ))}
-                      </ul>
-
-                      {(isViewMode || showResults) && (
-                        <details className="cursor-pointer" open={showResults}>
-                          <summary className="text-blue-600 font-medium hover:text-blue-800">
-                            {showResults ? 'Answer & Explanation' : 'Show Answer'}
-                          </summary>
-                          <div className="mt-3 p-4 bg-white rounded border-l-4 border-blue-500">
-                            <p className="text-gray-800"><strong>Answer:</strong> {q.answer}</p>
-                            <p className="text-gray-600 mt-2"><strong>Explanation:</strong> {q.explanation}</p>
-                            {showResults && userAnswers[idx] && (
-                              <p className="mt-2">
-                                <strong>Your Answer:</strong> 
-                                <span className={userAnswers[idx] === q.answer ? 'text-green-600' : 'text-red-600'}>
-                                  {' '}{userAnswers[idx]} {userAnswers[idx] === q.answer ? '✓' : '✗'}
-                                </span>
-                              </p>
-                            )}
-                          </div>
-                        </details>
-                      )}
-                    </>
-                  )}
-                </div>
-              ))}
-            </div>
-
-            {isTakeMode && !showResults && (
-              <button
-                onClick={handleSubmitQuiz}
-                className="w-full mt-6 bg-green-600 text-white py-4 rounded-lg font-bold text-lg hover:bg-green-700 transition-colors shadow-lg"
-              >
-                Submit Quiz 🎯
+              <button className="btn-ghost" onClick={handleBackToView} style={{ fontSize: '0.85rem' }}>
+                <RiEyeLine /> See Explanations
               </button>
-            )}
-          </div>
-
-          {isViewMode && (
-            <div>
-              <h3 className="text-xl font-semibold text-gray-700 mb-3">Related Topics</h3>
-              <div className="flex flex-wrap gap-2">
-                {quizData.related_topics?.map((topic, idx) => (
-                  <span key={idx} className="bg-indigo-100 text-indigo-700 px-3 py-1 rounded-full text-sm">
-                    {topic}
-                  </span>
-                ))}
-              </div>
             </div>
           )}
         </div>
+
+        {/* Summary + Entities */}
+        {isView && (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem' }}>
+            <div className="card" style={{ gridColumn: '1 / -1' }}>
+              <div className="section-label">Summary</div>
+              <p style={{ color: 'var(--text-secondary)', lineHeight: 1.7, fontSize: '0.95rem' }}>{quizData.summary}</p>
+            </div>
+            <div className="card entity-card" style={{ '--entity-accent': '#3b82f6' } as React.CSSProperties}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
+                <RiUserLine style={{ color: '#3b82f6' }} />
+                <div className="section-label" style={{ marginBottom: 0 }}>People</div>
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+                {(quizData.key_entities?.people || []).map((p, i) => <span key={i} className="tag tag-blue">{p}</span>)}
+                {!quizData.key_entities?.people?.length && <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>None listed</span>}
+              </div>
+            </div>
+            <div className="card entity-card" style={{ '--entity-accent': '#10b981' } as React.CSSProperties}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
+                <RiBuildingLine style={{ color: '#10b981' }} />
+                <div className="section-label" style={{ marginBottom: 0 }}>Organizations</div>
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+                {(quizData.key_entities?.organizations || []).map((o, i) => <span key={i} className="tag tag-green">{o}</span>)}
+                {!quizData.key_entities?.organizations?.length && <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>None listed</span>}
+              </div>
+            </div>
+            <div className="card entity-card" style={{ '--entity-accent': '#8b5cf6', gridColumn: '1 / -1' } as React.CSSProperties}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
+                <RiMapPinLine style={{ color: '#8b5cf6' }} />
+                <div className="section-label" style={{ marginBottom: 0 }}>Locations</div>
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+                {(quizData.key_entities?.locations || []).map((l, i) => <span key={i} className="tag tag-purple">{l}</span>)}
+                {!quizData.key_entities?.locations?.length && <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>None listed</span>}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Questions */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)', fontFamily: 'var(--font-display)' }}>
+              {isTake && !showResults ? 'Answer Each Question' : `${quizData.quiz.length} Questions`}
+            </h3>
+            {isTake && !showResults && (
+              <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                {Object.keys(userAnswers).length} / {quizData.quiz.length} answered
+              </div>
+            )}
+          </div>
+
+          {quizData.quiz?.map((q, idx) => {
+            const isCorrect = userAnswers[idx] === q.answer
+            const isAnswered = userAnswers[idx] !== undefined
+            let cardBorder = 'var(--border)'
+            if (showResults) cardBorder = isCorrect ? 'rgba(34,197,94,0.4)' : 'rgba(239,68,68,0.4)'
+            else if (isTake && isAnswered) cardBorder = 'var(--accent)'
+            const diff = difficultyConfig[q.difficulty] || { label: q.difficulty, color: '#94a3b8' }
+            const isOpen = openExplanations.has(idx)
+
+            return (
+              <div key={idx} className="card question-card" style={{ borderColor: cardBorder, transition: 'border-color 0.2s' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', marginBottom: '0.875rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                    <div className="q-number">{idx + 1}</div>
+                    {showResults && (
+                      isCorrect
+                        ? <RiCheckboxCircleLine style={{ color: '#22c55e', fontSize: '1.1rem' }} />
+                        : <RiCloseCircleLine style={{ color: '#ef4444', fontSize: '1.1rem' }} />
+                    )}
+                  </div>
+                  <span className="difficulty-badge" style={{ background: diff.color + '20', color: diff.color, borderColor: diff.color + '40' }}>
+                    {diff.label}
+                  </span>
+                </div>
+
+                <p style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: '1rem', lineHeight: 1.55, fontSize: '0.975rem' }}>{q.question}</p>
+
+                {isTake && !showResults ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                    {q.options.map((opt, i) => {
+                      const isSelected = userAnswers[idx] === opt.charAt(0)
+                      return (
+                        <label key={i} className="option-label" style={{
+                          background: isSelected ? 'rgba(99,102,241,0.08)' : 'var(--surface-2)',
+                          borderColor: isSelected ? 'var(--accent)' : 'var(--border)',
+                          color: isSelected ? 'var(--accent)' : 'var(--text-secondary)',
+                        }}>
+                          <input type="radio" name={`q-${idx}`} value={opt.charAt(0)} checked={isSelected}
+                            onChange={(e) => handleAnswerSelect(idx, e.target.value)}
+                            style={{ display: 'none' }} />
+                          <span className="option-key">{opt.charAt(0)}</span>
+                          <span style={{ fontSize: '0.9rem' }}>{opt.slice(2)}</span>
+                        </label>
+                      )
+                    })}
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', marginBottom: '1rem' }}>
+                    {q.options.map((opt, i) => {
+                      const letter = opt.charAt(0)
+                      const isCorrectOpt = letter === q.answer
+                      const isUserWrong = showResults && letter === userAnswers[idx] && !isCorrectOpt
+                      return (
+                        <div key={i} style={{
+                          padding: '0.6rem 0.875rem',
+                          borderRadius: '8px',
+                          fontSize: '0.88rem',
+                          display: 'flex', alignItems: 'center', gap: '0.6rem',
+                          background: isCorrectOpt && showResults ? 'rgba(34,197,94,0.1)' : isUserWrong ? 'rgba(239,68,68,0.08)' : 'var(--surface-2)',
+                          color: isCorrectOpt && showResults ? '#22c55e' : isUserWrong ? '#ef4444' : 'var(--text-secondary)',
+                          fontWeight: (isCorrectOpt && showResults) || isUserWrong ? 600 : 400,
+                        }}>
+                          <span style={{ fontWeight: 700, opacity: 0.7, minWidth: '1rem' }}>{letter}.</span>
+                          {opt.slice(2)}
+                          {isCorrectOpt && showResults && <RiCheckboxCircleLine style={{ marginLeft: 'auto', flexShrink: 0 }} />}
+                          {isUserWrong && <RiCloseCircleLine style={{ marginLeft: 'auto', flexShrink: 0 }} />}
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+
+                {/* Explanation toggle */}
+                {(isView || showResults) && (
+                  <div>
+                    <button
+                      onClick={() => toggleExplanation(idx)}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: '0.4rem',
+                        background: 'none', border: 'none', cursor: 'pointer',
+                        color: 'var(--accent)', fontSize: '0.85rem', fontWeight: 600, padding: '0.25rem 0',
+                      }}
+                    >
+                      {isOpen ? <RiArrowLeftLine /> : <RiArrowRightLine />}
+                      {isOpen ? 'Hide' : 'Show'} Explanation
+                    </button>
+                    {isOpen && (
+                      <div style={{ marginTop: '0.75rem', padding: '1rem', background: 'var(--surface-2)', borderRadius: '10px', borderLeft: '3px solid var(--accent)' }}>
+                        <div style={{ fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--accent)', marginBottom: '0.4rem' }}>
+                          Correct Answer: {q.answer}
+                        </div>
+                        <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', lineHeight: 1.6 }}>{q.explanation}</p>
+                        {showResults && userAnswers[idx] && (
+                          <div style={{ marginTop: '0.5rem', fontSize: '0.82rem', color: isCorrect ? '#22c55e' : '#ef4444', fontWeight: 600 }}>
+                            Your answer: {userAnswers[idx]} {isCorrect ? '— Correct!' : '— Incorrect'}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+
+          {isTake && !showResults && (
+            <button className="btn-primary" onClick={handleSubmitQuiz} style={{ width: '100%', padding: '1rem', fontSize: '1rem', marginTop: '0.5rem' }}>
+              <RiAwardLine style={{ fontSize: '1.2rem' }} /> Submit Quiz
+            </button>
+          )}
+        </div>
+
+        {/* Related Topics */}
+        {isView && quizData.related_topics?.length > 0 && (
+          <div className="card">
+            <div className="section-label">Related Topics</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+              {quizData.related_topics.map((t, i) => (
+                <span key={i} className="tag tag-default">{t}</span>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
-      <div className="container mx-auto px-4 py-8">
-        <header className="text-center mb-8">
-          <h1 className="text-5xl font-bold text-gray-800 mb-2">🧠 AI Quiz Generator</h1>
-          <p className="text-gray-600 text-lg">Generate intelligent quizzes from Wikipedia articles using AI</p>
-        </header>
+    <>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,400&display=swap');
 
-        <div className="flex justify-center mb-8">
-          <div className="bg-white rounded-lg shadow-md p-1 inline-flex">
-            <button
-              onClick={() => setActiveTab('generate')}
-              className={`px-6 py-3 rounded-md font-medium transition-all ${
-                activeTab === 'generate'
-                  ? 'bg-blue-600 text-white shadow-md'
-                  : 'text-gray-600 hover:text-gray-800'
-              }`}
-            >
-              Generate Quiz
-            </button>
-            <button
-              onClick={() => { setActiveTab('history'); loadHistory(); }}
-              className={`px-6 py-3 rounded-md font-medium transition-all ${
-                activeTab === 'history'
-                  ? 'bg-blue-600 text-white shadow-md'
-                  : 'text-gray-600 hover:text-gray-800'
-              }`}
-            >
-              History
-            </button>
-          </div>
-        </div>
+        :root {
+          --font-display: 'Syne', sans-serif;
+          --font-body: 'DM Sans', sans-serif;
+          --bg: #0c0f14;
+          --surface: #13181f;
+          --surface-2: #1a2030;
+          --border: rgba(255,255,255,0.07);
+          --border-hover: rgba(255,255,255,0.14);
+          --accent: #6366f1;
+          --accent-2: #818cf8;
+          --accent-glow: rgba(99,102,241,0.15);
+          --text-primary: #f1f5f9;
+          --text-secondary: #94a3b8;
+          --text-muted: #4b5563;
+        }
 
-        {activeTab === 'generate' && (
-          <div className="max-w-4xl mx-auto">
-            <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-              <input
-                type="text"
-                placeholder="Enter Wikipedia URL (e.g., https://en.wikipedia.org/wiki/Python_(programming_language))"
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
-              />
-              <button
-                onClick={generateQuiz}
-                disabled={loading || !url}
-                className={`w-full mt-4 py-3 rounded-lg font-semibold text-white transition-all ${
-                  loading || !url
-                    ? 'bg-gray-400 cursor-not-allowed'
-                    : 'bg-blue-600 hover:bg-blue-700 shadow-md hover:shadow-lg'
-                }`}
-              >
-                {loading ? (
-                  <span className="flex items-center justify-center">
-                    <svg className="animate-spin h-5 w-5 mr-3" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                    </svg>
-                    Generating Quiz...
-                  </span>
-                ) : (
-                  'Generate Quiz'
-                )}
-              </button>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+          background: var(--bg);
+          color: var(--text-primary);
+          font-family: var(--font-body);
+          min-height: 100vh;
+        }
+
+        .app-root {
+          min-height: 100vh;
+          background:
+            radial-gradient(ellipse 80% 50% at 50% -20%, rgba(99,102,241,0.12) 0%, transparent 70%),
+            var(--bg);
+        }
+
+        .container {
+          max-width: 860px;
+          margin: 0 auto;
+          padding: 2.5rem 1.5rem 4rem;
+        }
+
+        /* Header */
+        .header {
+          text-align: center;
+          margin-bottom: 3rem;
+        }
+        .logo-wrap {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 56px; height: 56px;
+          background: linear-gradient(135deg, #6366f1, #818cf8);
+          border-radius: 16px;
+          font-size: 1.6rem;
+          color: white;
+          margin-bottom: 1rem;
+          box-shadow: 0 0 32px rgba(99,102,241,0.35);
+        }
+        .header h1 {
+          font-family: var(--font-display);
+          font-size: clamp(2rem, 5vw, 2.75rem);
+          font-weight: 800;
+          letter-spacing: -0.02em;
+          background: linear-gradient(135deg, #f1f5f9 30%, #818cf8 100%);
+          -webkit-background-clip: text;
+          -webkit-text-fill-color: transparent;
+          background-clip: text;
+          line-height: 1.1;
+          margin-bottom: 0.5rem;
+        }
+        .header p {
+          color: var(--text-secondary);
+          font-size: 1rem;
+          letter-spacing: 0.01em;
+        }
+
+        /* Tabs */
+        .tabs {
+          display: flex;
+          background: var(--surface);
+          border: 1px solid var(--border);
+          border-radius: 12px;
+          padding: 4px;
+          gap: 4px;
+          margin-bottom: 2rem;
+          width: fit-content;
+          margin-left: auto;
+          margin-right: auto;
+        }
+        .tab-btn {
+          display: flex; align-items: center; gap: 0.5rem;
+          padding: 0.6rem 1.4rem;
+          border-radius: 9px;
+          border: none;
+          font-family: var(--font-body);
+          font-size: 0.9rem;
+          font-weight: 500;
+          cursor: pointer;
+          transition: all 0.18s;
+          color: var(--text-secondary);
+          background: transparent;
+        }
+        .tab-btn.active {
+          background: var(--accent);
+          color: white;
+          box-shadow: 0 2px 12px rgba(99,102,241,0.35);
+        }
+        .tab-btn:not(.active):hover { color: var(--text-primary); background: var(--surface-2); }
+
+        /* Input card */
+        .input-card {
+          background: var(--surface);
+          border: 1px solid var(--border);
+          border-radius: 16px;
+          padding: 1.5rem;
+          margin-bottom: 1.75rem;
+        }
+        .url-input {
+          width: 100%;
+          padding: 0.875rem 1rem;
+          background: var(--surface-2);
+          border: 1px solid var(--border);
+          border-radius: 10px;
+          color: var(--text-primary);
+          font-family: var(--font-body);
+          font-size: 0.9rem;
+          outline: none;
+          transition: border-color 0.18s, box-shadow 0.18s;
+          margin-bottom: 0.875rem;
+        }
+        .url-input::placeholder { color: var(--text-muted); }
+        .url-input:focus {
+          border-color: var(--accent);
+          box-shadow: 0 0 0 3px var(--accent-glow);
+        }
+
+        /* Buttons */
+        .btn-primary {
+          display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem;
+          background: linear-gradient(135deg, #6366f1, #818cf8);
+          color: white;
+          border: none;
+          border-radius: 10px;
+          padding: 0.75rem 1.5rem;
+          font-family: var(--font-body);
+          font-size: 0.9rem;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.18s;
+          box-shadow: 0 2px 16px rgba(99,102,241,0.3);
+          width: 100%;
+        }
+        .btn-primary:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 4px 24px rgba(99,102,241,0.45); }
+        .btn-primary:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+
+        .btn-ghost {
+          display: inline-flex; align-items: center; gap: 0.5rem;
+          background: var(--surface-2);
+          color: var(--text-secondary);
+          border: 1px solid var(--border);
+          border-radius: 10px;
+          padding: 0.65rem 1.25rem;
+          font-family: var(--font-body);
+          font-size: 0.875rem;
+          font-weight: 500;
+          cursor: pointer;
+          transition: all 0.18s;
+        }
+        .btn-ghost:hover { border-color: var(--border-hover); color: var(--text-primary); }
+
+        /* Cards */
+        .card {
+          background: var(--surface);
+          border: 1px solid var(--border);
+          border-radius: 16px;
+          padding: 1.5rem;
+          transition: border-color 0.2s;
+        }
+        .question-card { padding: 1.25rem 1.5rem; }
+        .entity-card { padding: 1.25rem; }
+
+        .section-label {
+          font-size: 0.72rem;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.1em;
+          color: var(--text-muted);
+          margin-bottom: 0.6rem;
+        }
+
+        /* Q number */
+        .q-number {
+          width: 28px; height: 28px;
+          background: var(--accent-glow);
+          border: 1px solid rgba(99,102,241,0.3);
+          color: var(--accent-2);
+          border-radius: 8px;
+          display: flex; align-items: center; justify-content: center;
+          font-family: var(--font-display);
+          font-size: 0.8rem;
+          font-weight: 700;
+          flex-shrink: 0;
+        }
+
+        /* Difficulty badge */
+        .difficulty-badge {
+          font-size: 0.72rem;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.07em;
+          padding: 0.25rem 0.7rem;
+          border-radius: 999px;
+          border: 1px solid;
+          flex-shrink: 0;
+        }
+
+        /* Option */
+        .option-label {
+          display: flex; align-items: center; gap: 0.75rem;
+          padding: 0.7rem 1rem;
+          border-radius: 10px;
+          border: 1.5px solid;
+          cursor: pointer;
+          transition: all 0.15s;
+          font-weight: 500;
+        }
+        .option-label:hover { border-color: var(--accent) !important; }
+        .option-key {
+          width: 26px; height: 26px;
+          background: rgba(255,255,255,0.05);
+          border-radius: 6px;
+          display: flex; align-items: center; justify-content: center;
+          font-size: 0.78rem;
+          font-weight: 700;
+          font-family: var(--font-display);
+          flex-shrink: 0;
+        }
+
+        /* Tags */
+        .tag {
+          font-size: 0.78rem;
+          padding: 0.25rem 0.7rem;
+          border-radius: 6px;
+          font-weight: 500;
+        }
+        .tag-blue { background: rgba(59,130,246,0.12); color: #93c5fd; }
+        .tag-green { background: rgba(16,185,129,0.12); color: #6ee7b7; }
+        .tag-purple { background: rgba(139,92,246,0.12); color: #c4b5fd; }
+        .tag-default { background: var(--surface-2); color: var(--text-secondary); border: 1px solid var(--border); }
+
+        .chip {
+          display: inline-flex; align-items: center; gap: 0.35rem;
+          font-size: 0.72rem;
+          font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: 0.08em;
+          color: var(--accent-2);
+          background: var(--accent-glow);
+          border: 1px solid rgba(99,102,241,0.2);
+          padding: 0.25rem 0.65rem;
+          border-radius: 6px;
+        }
+
+        /* History table */
+        .history-table-wrap {
+          background: var(--surface);
+          border: 1px solid var(--border);
+          border-radius: 16px;
+          overflow: hidden;
+        }
+        .history-table { width: 100%; border-collapse: collapse; }
+        .history-table th {
+          padding: 0.875rem 1.25rem;
+          text-align: left;
+          font-size: 0.72rem;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.1em;
+          color: var(--text-muted);
+          background: var(--surface-2);
+          border-bottom: 1px solid var(--border);
+        }
+        .history-table td {
+          padding: 0.875rem 1.25rem;
+          font-size: 0.875rem;
+          color: var(--text-secondary);
+          border-bottom: 1px solid var(--border);
+        }
+        .history-table tr:last-child td { border-bottom: none; }
+        .history-table tr:hover td { background: rgba(255,255,255,0.02); }
+        .history-table td.title { color: var(--text-primary); font-weight: 500; }
+
+        /* Empty state */
+        .empty-state {
+          padding: 4rem 2rem;
+          text-align: center;
+        }
+        .empty-icon {
+          font-size: 2.5rem;
+          color: var(--text-muted);
+          margin-bottom: 1rem;
+          display: block;
+        }
+        .empty-state h3 { font-family: var(--font-display); font-size: 1.1rem; margin-bottom: 0.4rem; }
+        .empty-state p { color: var(--text-muted); font-size: 0.875rem; }
+
+        /* Loading spinner */
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .spinner { animation: spin 0.8s linear infinite; display: inline-block; }
+
+        /* Modal */
+        .modal-overlay {
+          position: fixed; inset: 0;
+          background: rgba(0,0,0,0.7);
+          backdrop-filter: blur(4px);
+          display: flex; align-items: center; justify-content: center;
+          padding: 1rem;
+          z-index: 50;
+        }
+        .modal-box {
+          background: var(--bg);
+          border: 1px solid var(--border);
+          border-radius: 20px;
+          max-width: 820px;
+          width: 100%;
+          max-height: 90vh;
+          overflow-y: auto;
+          box-shadow: 0 25px 80px rgba(0,0,0,0.6);
+        }
+        .modal-header {
+          position: sticky; top: 0;
+          background: var(--bg);
+          border-bottom: 1px solid var(--border);
+          padding: 1.25rem 1.5rem;
+          display: flex; justify-content: space-between; align-items: center;
+          z-index: 10;
+        }
+        .modal-close {
+          width: 32px; height: 32px;
+          display: flex; align-items: center; justify-content: center;
+          background: var(--surface-2);
+          border: 1px solid var(--border);
+          border-radius: 8px;
+          color: var(--text-secondary);
+          cursor: pointer;
+          font-size: 1rem;
+          transition: all 0.15s;
+        }
+        .modal-close:hover { color: var(--text-primary); border-color: var(--border-hover); }
+
+        .small-btn {
+          display: inline-flex; align-items: center; gap: 0.4rem;
+          padding: 0.4rem 0.875rem;
+          font-size: 0.8rem;
+          font-weight: 600;
+          background: var(--accent);
+          color: white;
+          border: none;
+          border-radius: 7px;
+          cursor: pointer;
+          transition: opacity 0.15s;
+        }
+        .small-btn:hover { opacity: 0.85; }
+      `}</style>
+
+      <div className="app-root">
+        <div className="container">
+          {/* Header */}
+          <header className="header">
+            <div className="logo-wrap">
+              <RiBrainLine />
             </div>
+            <h1>AI Quiz Generator</h1>
+            <p>Turn any Wikipedia article into an intelligent quiz</p>
+          </header>
 
-            {quiz && <QuizDisplay quizData={quiz} mode={quizMode} />}
+          {/* Tabs */}
+          <div className="tabs">
+            <button className={`tab-btn ${activeTab === 'generate' ? 'active' : ''}`} onClick={() => setActiveTab('generate')}>
+              <RiSparklingLine /> Generate
+            </button>
+            <button className={`tab-btn ${activeTab === 'history' ? 'active' : ''}`} onClick={() => { setActiveTab('history'); loadHistory() }}>
+              <RiHistoryLine /> History
+            </button>
           </div>
-        )}
 
-        {activeTab === 'history' && (
-          <div className="max-w-6xl mx-auto">
-            <div className="bg-white rounded-lg shadow-md overflow-hidden">
+          {/* Generate Tab */}
+          {activeTab === 'generate' && (
+            <div>
+              <div className="input-card">
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.875rem' }}>
+                  <RiLinkM style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }} />
+                  <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>Wikipedia URL</span>
+                </div>
+                <input
+                  className="url-input"
+                  type="text"
+                  placeholder="https://en.wikipedia.org/wiki/Artificial_intelligence"
+                  value={url}
+                  onChange={(e) => setUrl(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && !loading && url && generateQuiz()}
+                />
+                <button className="btn-primary" onClick={generateQuiz} disabled={loading || !url}>
+                  {loading ? (
+                    <>
+                      <span className="spinner"><RiSparklingLine /></span>
+                      Generating Quiz…
+                    </>
+                  ) : (
+                    <>
+                      <RiSendPlaneLine /> Generate Quiz
+                    </>
+                  )}
+                </button>
+              </div>
+
+              {quiz && <QuizDisplay quizData={quiz} mode={quizMode} />}
+            </div>
+          )}
+
+          {/* History Tab */}
+          {activeTab === 'history' && (
+            <div className="history-table-wrap">
               {history.length === 0 ? (
-                <div className="p-12 text-center text-gray-500">
-                  <p className="text-xl">No quizzes generated yet.</p>
-                  <p className="mt-2">Generate your first quiz to see it here!</p>
+                <div className="empty-state">
+                  <RiHistoryLine className="empty-icon" />
+                  <h3>No quizzes yet</h3>
+                  <p>Generate your first quiz and it will appear here</p>
                 </div>
               ) : (
-                <table className="w-full">
-                  <thead className="bg-gray-50 border-b">
+                <table className="history-table">
+                  <thead>
                     <tr>
-                      <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">ID</th>
-                      <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Title</th>
-                      <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">URL</th>
-                      <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Date</th>
-                      <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Action</th>
+                      <th>#</th>
+                      <th>Title</th>
+                      <th>Date</th>
+                      <th></th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-200">
+                  <tbody>
                     {history.map((item) => (
-                      <tr key={item.id} className="hover:bg-gray-50 transition-colors">
-                        <td className="px-6 py-4 text-sm text-gray-600">{item.id}</td>
-                        <td className="px-6 py-4 text-sm font-medium text-gray-800">{item.title}</td>
-                        <td className="px-6 py-4 text-sm text-blue-600 truncate max-w-xs">{item.url}</td>
-                        <td className="px-6 py-4 text-sm text-gray-600">
-                          {new Date(item.date_generated).toLocaleString()}
+                      <tr key={item.id}>
+                        <td style={{ color: 'var(--text-muted)' }}>{item.id}</td>
+                        <td className="title">{item.title}</td>
+                        <td>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                            <RiTimeLine style={{ opacity: 0.5, fontSize: '0.85rem' }} />
+                            {new Date(item.date_generated).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                          </div>
                         </td>
-                        <td className="px-6 py-4">
-                          <button
-                            onClick={() => loadQuizDetails(item.id)}
-                            className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition-colors text-sm font-medium"
-                          >
-                            Details
+                        <td>
+                          <button className="small-btn" onClick={() => loadQuizDetails(item.id)}>
+                            <RiEyeLine /> View
                           </button>
                         </td>
                       </tr>
@@ -453,29 +860,30 @@ function App() {
                 </table>
               )}
             </div>
-          </div>
-        )}
+          )}
+        </div>
+      </div>
 
-        {showModal && selectedQuiz && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50" onClick={() => setShowModal(false)}>
-            <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-              <div className="sticky top-0 bg-white border-b px-6 py-4 flex justify-between items-center">
-                <h2 className="text-2xl font-bold text-gray-800">Quiz Details</h2>
-                <button
-                  onClick={() => setShowModal(false)}
-                  className="text-gray-500 hover:text-gray-700 text-2xl font-bold"
-                >
-                  ×
-                </button>
+      {/* Modal */}
+      {showModal && selectedQuiz && (
+        <div className="modal-overlay" onClick={() => setShowModal(false)}>
+          <div className="modal-box" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <RiBookOpenLine style={{ color: 'var(--accent)' }} />
+                <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '1rem' }}>Quiz Details</span>
               </div>
-              <div className="p-6">
-                <QuizDisplay quizData={selectedQuiz} mode={quizMode} />
-              </div>
+              <button className="modal-close" onClick={() => setShowModal(false)}>
+                <RiCloseLine />
+              </button>
+            </div>
+            <div style={{ padding: '1.5rem' }}>
+              <QuizDisplay quizData={selectedQuiz} mode={quizMode} />
             </div>
           </div>
-        )}
-      </div>
-    </div>
+        </div>
+      )}
+    </>
   )
 }
 

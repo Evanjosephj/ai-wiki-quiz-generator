@@ -10,9 +10,10 @@ from quiz_generator import generate_quiz
 
 app = FastAPI(title="AI Quiz Generator")
 
+# Allow frontend (Vercel) to call backend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"],  # replace with ["https://your-frontend.vercel.app"] in production
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -32,42 +33,29 @@ def root():
 
 @app.post("/generate_quiz")
 def create_quiz(request: QuizRequest, db: Session = Depends(get_db)):
-    try:
-        if not request.url.startswith("https://en.wikipedia.org/wiki/"):
-            raise HTTPException(400, "Invalid Wikipedia URL")
-        
-        title, content = scrape_wikipedia(request.url)
-        
-        if not title or not content:
-            raise HTTPException(400, "Failed to scrape article")
-        
-        quiz_data = generate_quiz(title, content)
-        
-        if not quiz_data:
-            raise HTTPException(500, "Failed to generate quiz")
-        
-        new_quiz = Quiz(
-            url=request.url,
-            title=title,
-            full_quiz_data=json.dumps(quiz_data)
-        )
-        
-        db.add(new_quiz)
-        db.commit()
-        db.refresh(new_quiz)
-        
-        return {
-            "id": new_quiz.id,
-            "url": new_quiz.url,
-            "title": new_quiz.title,
-            "date_generated": new_quiz.date_generated.isoformat(),
-            **quiz_data
-        }
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(500, f"Error: {str(e)}")
+    if not request.url.startswith("https://en.wikipedia.org/wiki/"):
+        raise HTTPException(400, "Invalid Wikipedia URL")
+    title, content = scrape_wikipedia(request.url)
+    if not title or not content:
+        raise HTTPException(400, "Failed to scrape article")
+    quiz_data = generate_quiz(title, content)
+    if not quiz_data:
+        raise HTTPException(500, "Failed to generate quiz")
+    new_quiz = Quiz(
+        url=request.url,
+        title=title,
+        full_quiz_data=json.dumps(quiz_data)
+    )
+    db.add(new_quiz)
+    db.commit()
+    db.refresh(new_quiz)
+    return {
+        "id": new_quiz.id,
+        "url": new_quiz.url,
+        "title": new_quiz.title,
+        "date_generated": new_quiz.date_generated.isoformat(),
+        **quiz_data
+    }
 
 @app.get("/history")
 def get_history(db: Session = Depends(get_db)):
@@ -85,12 +73,9 @@ def get_history(db: Session = Depends(get_db)):
 @app.get("/quiz/{quiz_id}")
 def get_quiz(quiz_id: int, db: Session = Depends(get_db)):
     quiz = db.query(Quiz).filter(Quiz.id == quiz_id).first()
-    
     if not quiz:
         raise HTTPException(404, "Quiz not found")
-    
     quiz_data = json.loads(quiz.full_quiz_data)
-    
     return {
         "id": quiz.id,
         "url": quiz.url,
