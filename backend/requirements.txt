@@ -1,19 +1,19 @@
-fastapi==0.110.0
-uvicorn==0.24.0
+fastapi==0.115.6
+uvicorn==0.34.0
 
-pydantic==2.5.3
-sqlalchemy==2.0.25
+pydantic==2.11.1
+sqlalchemy==2.0.38
 
 python-dotenv==1.0.1
-python-multipart==0.0.9
+python-multipart==0.0.20
 
-requests==2.31.0
+requests==2.32.3
 beautifulsoup4==4.12.3
 
 # LangChain (stable aligned set)
-langchain==0.1.16
-langchain-community==0.0.34
-langchain-core==0.1.46
+langchain==0.3.18
+langchain-community==0.3.17
+langchain-core==0.3.37
 
-# Google GenAI (optional — only if needed)
-langchain-google-genai==1.0.3
+# Google GenAI
+langchain-google-genai==2.0.10
